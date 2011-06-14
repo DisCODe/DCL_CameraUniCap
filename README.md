@@ -9,10 +9,9 @@ Fill this section with description of this library.
 Dependencies
 ------------
 
-unicap
-CvBasic DCL (example tasks uses CvWindow)
+Put here any dependencies of this library (other DCLs, third party libraries etc)
 
 Maintainer
 ----------
 
-[Konrad Banachowicz](https://github.com/konradb3)
+Provide any information about yourself
