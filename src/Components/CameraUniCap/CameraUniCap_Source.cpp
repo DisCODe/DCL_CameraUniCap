@@ -51,6 +51,8 @@ bool CameraUniCap_Source::onInit() {
 
 	registerStream("out_img", &out_img);
 
+	registerStream("out_cameraInfo", &out_cameraInfo);
+
 	/*
 	 Get the all device found by the unicap library
 	 */
@@ -324,6 +326,7 @@ bool CameraUniCap_Source::onStop() {
 void CameraUniCap_Source::new_frame_cb(unicap_event_t event,
 		unicap_handle_t handle, unicap_data_buffer_t *buffer, void *usr_data) {
 
+	// Retrieve and dispatch image.
 	Mat
 			frame =
 					Mat(
@@ -336,9 +339,13 @@ void CameraUniCap_Source::new_frame_cb(unicap_event_t event,
 	LOG(LTRACE) << "Got new frame\n";
 
 	((CameraUniCap_Source*) (usr_data))->out_img.write(frame);
+
+	// Dispatch camera parameters.
+	cv::Size size(((CameraUniCap_Source*) (usr_data))->format.size.width, ((CameraUniCap_Source*) (usr_data))->format.size.height);
+	((CameraUniCap_Source*) (usr_data))->out_cameraInfo.write(Types::CameraInfo(size));
+
+	// Raise event.
 	((CameraUniCap_Source*) (usr_data))->newImage->raise();
-
-
 }
 
 void CameraUniCap_Source::onBufferTypeCahnged(const std::string & old_type, const std::string & new_type) {

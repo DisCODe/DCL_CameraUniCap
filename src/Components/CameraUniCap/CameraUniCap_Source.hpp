@@ -13,9 +13,12 @@
 #include "Panel_Empty.hpp"
 #include "DataStream.hpp"
 #include "Property.hpp"
+#include "Types/CameraInfo.hpp"
 
 #include <unicap.h>
 #include <opencv/cv.h>
+
+
 
 /**
  * \defgroup CameraUniCap CameraUniCap
@@ -28,6 +31,9 @@
  *
  * \streamout{out_img,cv::Mat}
  * Output image
+ *
+ * \streamout{out_cameraInfo,Types::CameraInfo}
+ * Info regardins the camera data (image size).
  *
  *
  * \par Events:
@@ -188,8 +194,11 @@ protected:
 	/// Event signaling that new image was retrieved.
 	Base::Event * newImage;
 
-	/// Output data stream
+	/// Output data stream containing image.
 	Base::DataStreamOut <Mat> out_img;
+
+	/// Output data stream containing camera properties.
+	Base::DataStreamOut <Types::CameraInfo> out_cameraInfo;
 
 	/// Frame
 	Mat frame;
