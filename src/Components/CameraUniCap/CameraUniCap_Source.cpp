@@ -6,10 +6,10 @@
  */
 
 #include "CameraUniCap_Source.hpp"
-
 #include "Logger.hpp"
 
-#include <opencv/highgui.h>
+#include <boost/bind.hpp>
+//#include <opencv/highgui.h>
 
 namespace Sources {
 namespace CameraUniCap {
@@ -19,15 +19,37 @@ namespace CameraUniCap {
 #define MAX_PROPERTIES 64
 
 CameraUniCap_Source::CameraUniCap_Source(const std::string & name) : Base::Component(name),
-	m_buffer_type("buffer/type", boost::bind(&CameraUniCap_Source::onBufferTypeCahnged, this, _1, _2), "SYSTEM", "combo")
+	m_buffer_type("buffer.type", boost::bind(&CameraUniCap_Source::onBufferTypeCahnged, this, _1, _2), "SYSTEM", "combo"),
+	m_device("device.name", std::string("/dev/video0")),
+	m_input("device.input", std::string("Composite1")),
+	m_norm("device.norm", std::string("PAL-BG")),
+	m_format("device.format", std::string("BGR3")),
+	m_width("device.width", 640),
+	m_height("device.height", 480)
 {
 	m_buffer_type.addConstraint("SYSTEM");
 	m_buffer_type.addConstraint("USER");
 	m_buffer_type.setToolTip("Buffer type");
+	
+	registerProperty(m_buffer_type);
+	registerProperty(m_device);
+	registerProperty(m_input);
+	registerProperty(m_norm);
+	registerProperty(m_format);
+	registerProperty(m_width);
+	registerProperty(m_height);
 }
 
 CameraUniCap_Source::~CameraUniCap_Source() {
 
+}
+
+void CameraUniCap_Source::prepareInterface() {
+	h_onStep.setup(this, &CameraUniCap_Source::onStep);
+	registerHandler("onStep", &h_onStep);
+	
+	registerStream("out_img", &out_img);
+	registerStream("out_cameraInfo", &out_cameraInfo);
 }
 
 bool CameraUniCap_Source::onInit() {
@@ -44,15 +66,8 @@ bool CameraUniCap_Source::onInit() {
 
 	unicap_status_t status = STATUS_SUCCESS;
 
-	registerProperty(m_buffer_type);
-
 	LOG(LINFO) << "CameraUniCap_Source::initialize()\n";
-	newImage = registerEvent("newImage");
-
-	registerStream("out_img", &out_img);
-
-	registerStream("out_cameraInfo", &out_cameraInfo);
-
+	
 	/*
 	 Get the all device found by the unicap library
 	 */
@@ -66,7 +81,7 @@ bool CameraUniCap_Source::onInit() {
 	}
 
 	for (int i = 0; i < dev_count; i++) {
-		if (props.device == devices[i].device) {
+		if (std::string(m_device) == std::string(devices[i].device)) {
 			device = devices[i];
 			LOG(LINFO) << "device found\n";
 			device_found = true;
@@ -75,7 +90,7 @@ bool CameraUniCap_Source::onInit() {
 	}
 
 	if (!device_found) {
-		LOG(LERROR) << "Device not found: " << props.device << '\n';
+		LOG(LERROR) << "Device not found: " << m_device << '\n';
 		throw(Common::DisCODeException("Failed to open device"));
 	}
 
@@ -83,8 +98,7 @@ bool CameraUniCap_Source::onInit() {
 	 Acquire a handle to this device
 	 */
 	if (!SUCCESS(unicap_open(&handle, &device))) {
-		LOG(LERROR) << "Failed to open device: " << device.identifier
-				<< '\n';
+		LOG(LERROR) << "Failed to open device: " << device.identifier;
 		throw(Common::DisCODeException("Failed to open device"));
 	}
 
@@ -94,8 +108,7 @@ bool CameraUniCap_Source::onInit() {
 	status = STATUS_SUCCESS;
 
 	for (format_count = 0; SUCCESS(status) && (format_count < MAX_FORMATS); format_count++) {
-		status = unicap_enumerate_formats(handle, NULL, &formats[format_count],
-				format_count);
+		status = unicap_enumerate_formats(handle, NULL, &formats[format_count], format_count);
 		if (SUCCESS(status)) {
 			LOG(LINFO) << format_count << ": "
 					<< formats[format_count].identifier << '\n';
@@ -105,7 +118,7 @@ bool CameraUniCap_Source::onInit() {
 	}
 
 	for (int i = 0; i < format_count; i++) {
-		if (props.format == (char*) &formats[i].fourcc) {
+		if (std::string(m_format) == (char*) &formats[i].fourcc) {
 			format = formats[i];
 			LOG(LINFO) << "format found\n";
 			break;
@@ -113,8 +126,7 @@ bool CameraUniCap_Source::onInit() {
 	}
 
 	for (int i = 0; i < format.size_count; i++) {
-		if ((props.width == format.sizes[i].width) && (props.height
-				== format.sizes[i].height)) {
+		if ((m_width == format.sizes[i].width) && (m_height == format.sizes[i].height)) {
 			format.size = format.sizes[i];
 			LOG(LINFO) << "size found\n";
 			break;
@@ -136,7 +148,7 @@ bool CameraUniCap_Source::onInit() {
 	buffer.buffer_size = format.buffer_size;
 
 	status = STATUS_SUCCESS;
-
+/*
 	for (property_count = 0; SUCCESS(status) && (property_count
 			< MAX_PROPERTIES); property_count++) {
 		status = unicap_enumerate_properties(handle, NULL,
@@ -232,7 +244,7 @@ bool CameraUniCap_Source::onInit() {
 			break;
 		}
 	}
-
+*/
 	unicap_register_callback(handle, UNICAP_EVENT_NEW_FRAME, (unicap_callback_t) new_frame_cb, this);
 
 	LOG(LINFO)<<"CameraUniCap_Source::onInit() end\n";
@@ -257,7 +269,7 @@ bool CameraUniCap_Source::onFinish() {
 
 }
 
-bool CameraUniCap_Source::onStep() {
+void CameraUniCap_Source::onStep() {
 //	unicap_data_buffer_t * returned_buffer;
 //
 //	//LOG(LNOTICE) << "1";
@@ -290,7 +302,6 @@ bool CameraUniCap_Source::onStep() {
 //
 //	//LOG(LNOTICE) << "5";
 //
-	return true;
 }
 
 bool CameraUniCap_Source::onStart() {
@@ -327,9 +338,7 @@ void CameraUniCap_Source::new_frame_cb(unicap_event_t event,
 		unicap_handle_t handle, unicap_data_buffer_t *buffer, void *usr_data) {
 
 	// Retrieve and dispatch image.
-	Mat
-			frame =
-					Mat(
+	Mat frame = Mat(
 							((CameraUniCap_Source*) (usr_data))->format.size.height,
 							((CameraUniCap_Source*) (usr_data))->format.size.width,
 							(std::string("GREY")
@@ -342,10 +351,7 @@ void CameraUniCap_Source::new_frame_cb(unicap_event_t event,
 
 	// Dispatch camera parameters.
 	cv::Size size(((CameraUniCap_Source*) (usr_data))->format.size.width, ((CameraUniCap_Source*) (usr_data))->format.size.height);
-	((CameraUniCap_Source*) (usr_data))->out_cameraInfo.write(Types::CameraInfo(size));
-
-	// Raise event.
-	((CameraUniCap_Source*) (usr_data))->newImage->raise();
+	((CameraUniCap_Source*) (usr_data))->out_cameraInfo.write(Types::CameraInfo(size.width, size.height));
 }
 
 void CameraUniCap_Source::onBufferTypeCahnged(const std::string & old_type, const std::string & new_type) {
